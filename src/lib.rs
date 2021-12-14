@@ -20,20 +20,19 @@ use tempfile::TempDir;
 use tracing::{debug, info, instrument, warn};
 use url::Url;
 
-use hc_utils::WrappedHeaderHash;
 use holochain::conductor::api::ZomeCall;
 use holochain::conductor::api::{AppResponse, InstalledAppInfo};
 use holochain_types::prelude::{zome_io::ExternIO, FunctionName, ZomeName};
 use holochain_types::prelude::{MembraneProof, UnsafeBytes};
 
 pub async fn activate_holo_hosted_happs(core_happ: &Happ, config: &Config) -> Result<()> {
-    let list_of_happs = get_all_enabled_hosted_happs(core_happ).await?;
-    install_holo_hosted_happs(list_of_happs, config).await?;
+    let happs = get_all_enabled_hosted_happs(core_happ).await?;
+    install_holo_hosted_happs(happs, config).await?;
     Ok(())
 }
 
 pub async fn install_holo_hosted_happs(
-    happs: Vec<(WrappedHeaderHash, Vec<DnaResource>)>,
+    happs: Vec<PresentedHappBundle>,
     config: &Config,
 ) -> Result<()> {
     info!("Starting to install....");
@@ -69,7 +68,13 @@ pub async fn install_holo_hosted_happs(
     // iterate through the vec and
     // Call http://localhost/holochain-api/install_hosted_happ
     // for each WrappedHeaderHash to install the hosted_happ
-    for (happ_id, dnas) in happs {
+    for PresentedHappBundle {
+        id: happ_id,
+        dnas,
+        is_clone,
+        ..
+    } in happs
+    {
         if active_happs.contains(&format!("{:?}", happ_id)) {
             info!("App {:?} already installed", happ_id);
         } else {
@@ -78,6 +83,7 @@ pub async fn install_holo_hosted_happs(
             info!("Installing happ-id {:?}", happ_id);
             let body = InstallHappBody {
                 happ_id: happ_id.0.to_string(),
+                is_clone,
                 preferences: preferences.clone(),
                 membrane_proofs: mem_proof.clone(),
             };
@@ -106,9 +112,7 @@ pub fn load_mem_proof_file(dnas: Vec<DnaResource>) -> Result<HashMap<String, Mem
 }
 
 #[instrument(err)]
-pub async fn get_all_enabled_hosted_happs(
-    core_happ: &Happ,
-) -> Result<Vec<(WrappedHeaderHash, Vec<DnaResource>)>> {
+pub async fn get_all_enabled_hosted_happs(core_happ: &Happ) -> Result<Vec<PresentedHappBundle>> {
     let mut app_websocket = AppWebsocket::connect(42233)
         .await
         .context("failed to connect to holochain's app interface")?;
@@ -135,11 +139,7 @@ pub async fn get_all_enabled_hosted_happs(
                     info!("ZomeCall Response - Hosted happs List {:?}", r);
                     let happ_bundles: Vec<PresentedHappBundle> =
                         rmp_serde::from_read_ref(r.as_bytes())?;
-                    let happ_bundle_ids = happ_bundles
-                        .into_iter()
-                        .map(|happ| (happ.id, happ.dnas))
-                        .collect();
-                    Ok(happ_bundle_ids)
+                    Ok(happ_bundles)
                 }
                 _ => Err(anyhow!("unexpected response: {:?}", response)),
             }
