@@ -28,6 +28,7 @@ pub struct PresentedHappBundle {
     pub id: WrappedHeaderHash,
     pub provider_pubkey: WrappedAgentPubKey,
     pub is_draft: bool,
+    pub is_clone: bool,
     pub bundle_url: String,
     pub ui_src_url: String,
     pub dnas: Vec<DnaResource>,
@@ -53,6 +54,7 @@ pub struct Preferences {
 #[derive(Serialize, Debug, Clone)]
 pub struct InstallHappBody {
     pub happ_id: String,
+    pub is_clone: bool,
     pub preferences: Preferences,
     pub membrane_proofs: HashMap<String, MembraneProof>,
 }
